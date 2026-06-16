@@ -21,8 +21,7 @@ logger = logging.getLogger(__name__)
 class ScreenshotUploadView(APIView):
     """
     POST /api/v1/screener/upload/
-    Принимает один или несколько файлов изображений,
-    сохраняет и ставит задачу на анализ.
+    Принимает один или несколько файлов, сохраняет и ставит задачу на анализ.
     """
     parser_classes = [MultiPartParser]
     permission_classes = [AllowAny]
@@ -38,15 +37,17 @@ class ScreenshotUploadView(APIView):
         serializer = ScreenshotUploadSerializer(data={"images": images})
         serializer.is_valid(raise_exception=True)
 
-        from apps.screener.models import Screenshot
-        from apps.screener.tasks import analyze_screenshots
+        from django_q.tasks import async_task
 
         screenshot_ids = []
         for img in serializer.validated_data["images"]:
             s = Screenshot.objects.create(image=img)
             screenshot_ids.append(s.id)
 
-        analyze_screenshots.delay(screenshot_ids)
+        async_task(
+            "apps.screener.tasks.analyze_screenshots",
+            screenshot_ids,
+        )
         logger.info("Uploaded %d screenshots, task dispatched.", len(screenshot_ids))
 
         return Response(
@@ -60,8 +61,8 @@ class ScreenshotUploadView(APIView):
 
 class ScreenshotViewSet(ReadOnlyModelViewSet):
     """
-    GET /api/v1/screener/screenshots/        — список
-    GET /api/v1/screener/screenshots/{id}/   — детали + результат
+    GET /api/v1/screener/screenshots/
+    GET /api/v1/screener/screenshots/{id}/
     """
     queryset = Screenshot.objects.select_related("result").all()
     serializer_class = ScreenshotSerializer
@@ -71,7 +72,7 @@ class ScreenshotViewSet(ReadOnlyModelViewSet):
 
 class WhitelistViewSet(ReadOnlyModelViewSet):
     """
-    GET /api/v1/screener/whitelist/        — список (только для админов)
+    GET /api/v1/screener/whitelist/  — только для админов
     """
     queryset = WhitelistUser.objects.all()
     serializer_class = WhitelistUserSerializer

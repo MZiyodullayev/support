@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'apps.screener',
     'rest_framework',
     'rest_framework_simplejwt',
+    'django_q',
 ]
 
 MIDDLEWARE = [
@@ -128,13 +129,16 @@ if not DEBUG:
     CSRF_COOKIE_SAMESITE = "None"
     SESSION_COOKIE_SAMESITE = "None"
 
-# --- Celery ---
-CELERY_BROKER_URL = env("REDIS_URL", default="redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = env("REDIS_URL", default="redis://localhost:6379/0")
-CELERY_ACCEPT_CONTENT = ["json"]
-CELERY_TASK_SERIALIZER = "json"
-CELERY_RESULT_SERIALIZER = "json"
-CELERY_TIMEZONE = TIME_ZONE
+# --- Django Q2 (очередь задач без Redis) ---
+Q_CLUSTER = {
+    "name": "screener",
+    "workers": 2,
+    "timeout": 120,
+    "retry": 180,
+    "queue_limit": 50,
+    "bulk": 10,
+    "orm": "default",   # хранит очередь в SQLite
+}
 
 # --- Screener app ---
 GROQ_API_KEY = env("GROQ_API_KEY")

@@ -3,13 +3,12 @@ import logging
 import os
 
 import requests
-from celery import shared_task
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
 
-def _call_groq(image_paths: list[str]) -> str:
+def _call_groq(image_paths: list) -> str:
     """Отправляет изображения в Groq API и возвращает текстовый ответ."""
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
@@ -81,11 +80,11 @@ def _broadcast_telegram(text: str) -> None:
             logger.error("Telegram error for %s: %s", telegram_id, e)
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=10)
-def analyze_screenshots(self, screenshot_ids: list[int]) -> None:
+def analyze_screenshots(screenshot_ids: list) -> None:
     """
     Основная задача: берёт скриншоты из БД, анализирует через Groq,
     сохраняет результат и рассылает в Telegram.
+    Вызывается через Django Q2: async_task('apps.screener.tasks.analyze_screenshots', ids)
     """
     from apps.screener.models import AnalysisResult, Screenshot
 
@@ -94,7 +93,6 @@ def analyze_screenshots(self, screenshot_ids: list[int]) -> None:
         logger.warning("No screenshots found for ids: %s", screenshot_ids)
         return
 
-    # Помечаем как "в обработке"
     screenshots.update(status="processing")
 
     image_paths = []
@@ -108,13 +106,10 @@ def analyze_screenshots(self, screenshot_ids: list[int]) -> None:
         return
 
     try:
-        _broadcast_telegram(
-            f"📸 Получил {len(image_paths)} скриншот(а). Анализирую..."
-        )
+        _broadcast_telegram(f"📸 Получил {len(image_paths)} скриншот(а). Анализирую...")
 
         answer = _call_groq(image_paths)
 
-        # Сохраняем результат для каждого скриншота (основной — первый)
         primary = screenshots.first()
         AnalysisResult.objects.update_or_create(
             screenshot=primary,
@@ -124,7 +119,6 @@ def analyze_screenshots(self, screenshot_ids: list[int]) -> None:
             },
         )
         screenshots.update(status="done")
-
         _broadcast_telegram(f"🎯 ОТВЕТ:\n\n{answer}")
         logger.info("Task done for screenshots: %s", screenshot_ids)
 
@@ -132,4 +126,4 @@ def analyze_screenshots(self, screenshot_ids: list[int]) -> None:
         logger.error("analyze_screenshots failed: %s", exc)
         screenshots.update(status="error")
         _broadcast_telegram(f"❌ Ошибка при анализе: {exc}")
-        raise self.retry(exc=exc)
+        raise
