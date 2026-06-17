@@ -1,43 +1,89 @@
-# uneversity-program-for-training
+# Screener Bot — Django
 
-mirik:
-python -m vemv vemv 
-source venv/Scripts/activate
+AI-бот: мониторит папку со скриншотами → анализирует через Groq → рассылает ответ в Telegram.
 
-pip install -r requirements.txt
+## Стек
+
+- Django 6 + DRF + JWT
+- Django Q2 (очередь задач, хранится в SQLite — Redis не нужен)
+- Watchdog (мониторинг папки)
+- Groq API (llama-4-scout vision)
+- Telegram Bot API
+
+## Структура
+
+```
+src/
+├── apps/
+│   ├── users/          # кастомный User
+│   ├── utils/          # утилиты
+│   └── screener/       # основное приложение
+│       ├── models.py   # WhitelistUser, Screenshot, AnalysisResult
+│       ├── tasks.py    # Groq + Telegram рассылка
+│       ├── admin.py
+│       └── management/commands/run_watcher.py
+├── api/
+│   ├── serializer/screener.py
+│   ├── views/screener.py
+│   └── urls.py
+└── config/
+    └── settings.py
+```
+
+## Установка (Windows)
+
+```bash
+# 1. Распаковать архив, открыть папку
 cd src
 
-python manage.py makemigrations
+# 2. Создать виртуальное окружение
+python -m venv venv
+venv\Scripts\activate        # Windows CMD
+# или
+source venv/bin/activate     # Git Bash / WSL
+
+# 3. Установить зависимости
+pip install -r requirements.txt
+
+# 4. Настроить .env
+copy .env.example .env
+# Открыть .env и заполнить своими ключами
+
+# 5. Миграции (создаёт db.sqlite3 с таблицами для очереди)
 python manage.py migrate
-python manage.py createsuperusers
+
+# 6. Создать суперпользователя (для Django Admin)
+python manage.py createsuperuser
+```
+
+## Запуск (3 терминала вместо 4)
+
+```bash
+# Терминал 1 — воркер очереди задач
+cd src
+venv\Scripts\activate
+python manage.py qcluster
+
+# Терминал 2 — watchdog (слежка за папкой)
+cd src
+venv\Scripts\activate
+python manage.py run_watcher
+
+# Терминал 3 — Django сервер
+cd src
+venv\Scripts\activate
 python manage.py runserver
+```
 
-git branch -M [name]
+## API эндпоинты
 
-git add .
-git commit -m " info "
-git push
+| Метод | URL | Описание |
+|-------|-----|----------|
+| POST | `/api/v1/screener/upload/` | Загрузить скриншоты (multipart, поле `images`) |
+| GET | `/api/v1/screener/screenshots/` | Список скриншотов + результаты |
+| GET | `/api/v1/screener/screenshots/{id}/` | Детали + ответ AI |
+| GET | `/api/v1/screener/whitelist/` | Вайтлист (только для админов) |
 
-git pull origin main
+## Добавить пользователей в whitelist
 
-
-
-# Commands #
-1. pwd =                            tells us where we are
-2. ls =                             shows what is in this folder.
-3. ls -l =                          shows a list of folders in a convenient way.
-4. clear =                          clean terminal.
-5. ctrl + l =                       clears the terminal
-6. mkdir =                          command line to create this folder
-7. cd folder-name =                 enter the folder.
-8. cd .. =                          this is back, i.e. back
-9. rmdir =                          this deletes the folder.
-10. touch file-name =               command line to create a file;
-11. echo" something " > file-name = created this file and adds information into it.
-12. cat file-name =                 to view the information inside this file.
-13. nano file-name =                editor to change file.
-14. ctrl+x => y => ctrl+m =         saves changes to this file and exits the editor.
-15. rm -rf =                        this deletes the folder and its contents, including files.
-16. mv =                            this renames or moves files and folders.
-17. cp =                            copies this file or folder.
-
+Django Admin → `http://localhost:8000/admin/` → Screener → Whitelist users → Add
